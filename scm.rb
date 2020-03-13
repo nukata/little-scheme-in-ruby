@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # -*- coding: utf-8 -*-
-# A little Scheme in Ruby 2.3, v0.1.0 R02.03.10/R02.03.11 by SUZUKI Hisao
+# A little Scheme in Ruby 2.3/2.7, v0.2 R02.03.10/R02.03.13 by SUZUKI Hisao
 # cf. https://github.com/nukata/little-scheme-in-cs
 #     https://github.com/nukata/l2lisp-in-ruby
 
@@ -8,10 +8,16 @@ module LittleScheme
   LS = LittleScheme
 
   # A unique value which means the expression has no value
-  NONE = :'#<VOID>'
+  NONE = Object.new
+  def NONE.inspect
+    return "#<VOID>"
+  end
 
   # A unique value which means the End Of File
-  EOF = :'#<EOF>'
+  EOF = Object.new
+  def EOF.inspect
+    return "#<EOF>"
+  end
 
   # Cons cell
   class Cell
@@ -83,7 +89,7 @@ module LittleScheme
     def look_for(symbol)
       env = self.find {|e| e.symbol.equal? symbol}
       return env unless env.nil?
-      raise NameError.new("#{symbol} not found", name: symbol)
+      raise NameError.new("#{symbol} not found", symbol)
     end
 
     # Build a new environment by prepending the bindings of symbols and data
@@ -110,19 +116,27 @@ module LittleScheme
 
   # Scheme's continuation as a stack of steps
   class Continuation
-    attr_reader :stack
-    
     # Construct a copy of another continuation, or an empty continuation.
     def initialize(other=nil)
-      @stack = other.nil? ? [] : Array.new(other.stack)
+      @stack = other.nil? ? [] : other.copy_stack
     end
 
     # Copy steps from another continuation.
     def copy_from(other)
-      @stack = Array.new(other.stack)
+      @stack = other.copy_stack
     end
 
-    # Length of the continuation (it is expected to be an O(1) operation.)
+    # Return a copy of the inner stack.
+    def copy_stack
+      return Array.new @stack
+    end
+
+    # Return true if the continuation is empty.
+    def empty?
+      return @stack.empty?
+    end
+
+    # Length of the continuation
     def length
       return @stack.length
     end
@@ -201,7 +215,11 @@ module LittleScheme
   # Exception thrown by the error procedure of SRFI-23
   class ErrorException < RuntimeError
     def initialize(reason, arg)
-      super "Error: #{LS.stringify(reason, false)}: #{LS.stringify arg}"
+      if arg.equal? NONE
+        super "Error: #{LS.stringify(reason, false)}"
+      else
+        super "Error: #{LS.stringify(reason, false)}: #{LS.stringify arg}"
+      end
     end
   end # ErrorException
 
@@ -295,11 +313,19 @@ module LittleScheme
                   c(:not, 1, lambda {|x| x.car.equal? false},
                     c(:list, -1, lambda {|x| x},
                       c(:display, 1, lambda {|x|
-                          print stringify(x.car, false)
+                          begin
+                            print stringify(x.car, false)
+                          rescue Errno::EPIPE => ex
+                            raise ErrorException.new(ex, NONE)
+                          end
                           return NONE
                         },
                         c(:newline, 0, lambda {|x|
-                            puts
+                            begin
+                              puts
+                            rescue Errno::EPIPE => ex
+                              raise ErrorException.new(ex, NONE)
+                            end
                             return NONE
                           },
                           c(:read, 0, lambda {|x| read_expression},
@@ -353,7 +379,7 @@ module LittleScheme
         }
         loop {
           # print "_#{k.length}"
-          return exp if k.length == 0
+          return exp if k.empty?
           op, x = k.pop
           case op
           when :Then            # x is (e2 [e3]).
@@ -417,8 +443,8 @@ module LittleScheme
       raise
     rescue => ex
       s =  "#{ex.class}: #{ex.message}"
-      s += "\n\t#{stringify k}" if k.length > 0
-      e = RuntimeError.new(s)
+      s += "\n\t#{stringify k}" unless k.empty?
+      e = RuntimeError.new s
       e.set_backtrace ex.backtrace
       raise e
     end
@@ -446,7 +472,7 @@ module LittleScheme
       if fun.arity >= 0
         if arg.nil? ? fun.arity > 0 : arg.count != fun.arity
           raise ArgumentError,
-                "arity not matched: #{fun} and #{stringify arg}"
+                "arity not matched: #{stringify fun} and #{stringify arg}"
         end
       end
       return [fun.fun.call(arg), env]
@@ -551,7 +577,7 @@ module LittleScheme
       rescue IndexError
         print old.empty? ? prompt1 : prompt2
         $stdout.flush
-        line = gets
+        line = $stdin.gets
         return EOF if line.nil?
         STDIN_TOKENS.replace old
         split_string_into_tokens(line) {|token|
@@ -569,15 +595,16 @@ module LittleScheme
     loop {
       begin
         exp = read_expression("> ", "| ")
-        if (exp.equal? EOF)
+        if exp.equal? EOF
           puts "Goodbye"
           return
         end
         result = evaluate(exp, GLOBAL_ENV)
-        puts stringify result unless result.equal? NONE
       rescue => ex
         puts ex
         # raise
+      else
+        puts stringify result unless result.equal? NONE
       end
     }
   end
@@ -586,7 +613,9 @@ module LittleScheme
   def self.load(file_name)
     source = File.open(file_name).read()
     tokens = []
-    split_string_into_tokens(source) {|t| tokens << t}
+    split_string_into_tokens(source) {|token|
+      tokens << token
+    }
     until tokens.empty?
       exp = read_from_tokens(tokens)
       evaluate(exp, GLOBAL_ENV)
@@ -605,8 +634,8 @@ if __FILE__ == $0               # The main routine
     end
     LS.read_eval_print_loop
   rescue => ex
-    puts ex
-    puts ex.backtrace
+    $stderr.puts ex
+    $stderr.puts ex.backtrace unless LS::ErrorException === ex
     exit 1
   end
 end
