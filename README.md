@@ -4,6 +4,7 @@ This is a small interpreter of a subset of Scheme.
 It runs on Ruby 2.3 and Ruby 2.7.
 It implements the same language as
 
+- [little-scheme-in-crystal](https://github.com/nukata/little-scheme-in-crystal)
 - [little-scheme-in-cs](https://github.com/nukata/little-scheme-in-cs)
 - [little-scheme-in-dart](https://github.com/nukata/little-scheme-in-dart)
 - [little-scheme-in-go](https://github.com/nukata/little-scheme-in-go)
@@ -69,7 +70,10 @@ $ ./scm.rb ../little-scheme/scm.scm < ../little-scheme/examples/nqueens.scm
 $ 
 ```
 
-The last example above will take a little long time.  Ruby is slow.
+The last example above will take a little long time.
+Compare this `scm.rb` to [little-scheme-in-crystal](https://github.com/nukata/little-scheme-in-crystal),
+which is written in Crystal, a Ruby-like language.
+Crystal is much faster than Ruby in this respect and others.
 
 Put a "`-`" after the script in the command line to begin a session 
 after running the script.

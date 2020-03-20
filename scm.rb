@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # -*- coding: utf-8 -*-
-# A little Scheme in Ruby 2.3/2.7, v0.2 R02.03.10/R02.03.13 by SUZUKI Hisao
+# A little Scheme in Ruby 2.3/2.7, v0.2.1 R02.03.10/R02.03.20 by SUZUKI Hisao
 # cf. https://github.com/nukata/little-scheme-in-cs
 #     https://github.com/nukata/l2lisp-in-ruby
 
@@ -56,7 +56,7 @@ module LittleScheme
 
   # ----------------------------------------------------------------------
 
-  # Linked list of bindings which are mapping symbols to values
+  # Linked list of bindings which map symbols to values
   class Environment
     include Enumerable
 
@@ -141,15 +141,15 @@ module LittleScheme
       return @stack.length
     end
 
-    # Push a step to the top of the continuation.
-    def push(operation, value)
-      @stack.push [operation, value]
-    end
-
     # Override Object#inspect.  Return a quasi-stack trace.
     def inspect
       ss = @stack.map {|step| "#{step[0]} #{LS.stringify step[1]}"}
       return "#<#{ss.join "\n\t"}>"
+    end
+
+    # Push a step to the top of the continuation.
+    def push(operation, value)
+      @stack.push [operation, value]
     end
 
     # Pop a step, [operation, value], from the top of the continuation.
@@ -480,7 +480,7 @@ module LittleScheme
       k.push_RestoreEnv(env)
       k.push(:Begin, fun.body)
       return [NONE,
-              Environment.new(nil, # frame maker
+              Environment.new(nil, # frame marker
                               nil,
                               fun.env.prepend_defs(fun.params, arg))]
     when Continuation
