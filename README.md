@@ -2,13 +2,16 @@
 
 This is a small interpreter of a subset of Scheme.
 It runs on Ruby 2.3 and Ruby 2.7.
-It implements the same language as
+It implements almost the same language as
 
 - [little-scheme-in-crystal](https://github.com/nukata/little-scheme-in-crystal)
 - [little-scheme-in-cs](https://github.com/nukata/little-scheme-in-cs)
 - [little-scheme-in-dart](https://github.com/nukata/little-scheme-in-dart)
 - [little-scheme-in-go](https://github.com/nukata/little-scheme-in-go)
 - [little-scheme-in-java](https://github.com/nukata/little-scheme-in-java)
+- [little-scheme-in-kotlin](https://github.com/nukata/little-scheme-in-kotlin)
+- [little-scheme-in-lisp](https://github.com/nukata/little-scheme-in-lisp)
+- [little-scheme-in-php](https://github.com/nukata/little-scheme-in-php)
 - [little-scheme-in-python](https://github.com/nukata/little-scheme-in-python)
 - [little-scheme-in-typescript](https://github.com/nukata/little-scheme-in-typescript)
 
@@ -63,6 +66,8 @@ $ ./scm.rb ../little-scheme/examples/yin-yang-puzzle.scm | head
 Error: #<Errno::EPIPE: Broken pipe @ io_write - <STDOUT>>
 $ ./scm.rb ../little-scheme/examples/amb.scm
 ((1 A) (1 B) (1 C) (2 A) (2 B) (2 C) (3 A) (3 B) (3 C))
+$ ./scm.rb ../little-scheme/examples/dynamic-wind-example.scm
+(connect talk1 disconnect connect talk2 disconnect)
 $ ./scm.rb ../little-scheme/examples/nqueens.scm
 ((5 3 1 6 4 2) (4 1 5 2 6 3) (3 6 2 5 1 4) (2 4 6 1 3 5))
 $ ./scm.rb ../little-scheme/scm.scm < ../little-scheme/examples/nqueens.scm
@@ -71,7 +76,8 @@ $
 ```
 
 The last example above will take a little long time.
-Compare this `scm.rb` to [little-scheme-in-crystal](https://github.com/nukata/little-scheme-in-crystal),
+Compare this `scm.rb` to
+[little-scheme-in-crystal](https://github.com/nukata/little-scheme-in-crystal),
 which is written in Crystal, a Ruby-like language.
 Crystal is much faster than Ruby in this respect and others.
 
@@ -79,11 +85,26 @@ Put a "`-`" after the script in the command line to begin a session
 after running the script.
 
 ```
+$ cat ../little-scheme/examples/fib90.scm 
+;; Fibonacci numbers: F(n) = F(n-1) + F(n-2) with F(0) = 0 and F(1) = 1. 
+;; cf. https://oeis.org/A000045
+(define fibonacci
+  (lambda (n)
+    (define _fib
+      (lambda (i F_i F_i+1)
+        (if (= i n)
+            F_i
+          (_fib (+ i 1) F_i+1 (+ F_i F_i+1)))))
+    (_fib 0 0 1)))                      ; i=0, F(0)=0, F(1)=1
+
+(display (fibonacci 90))
+(newline)
+;; => 2880067194370816120
 $ ./scm.rb ../little-scheme/examples/fib90.scm -
 2880067194370816120
 > (globals)
-(apply call/cc globals error = < * - + symbol? eof-object? read newline display
-list not null? pair? eqv? eq? cons cdr car fibonacci)
+(globals error number? = < * - + apply call/cc symbol? eof-object? read newline 
+display list not null? pair? eq? cons cdr car fibonacci)
 > (fibonacci 16)
 987
 > (fibonacci 1000)
@@ -135,16 +156,17 @@ For simplicity, this Scheme treats (`define` _v_ _e_) as an expression type.
 
 ### Built-in procedures
 
-|                      |                          |                     |
-|:---------------------|:-------------------------|:--------------------|
-| (`car` _lst_)        | (`not` _x_)              | (`eof-object?` _x_) |
-| (`cdr` _lst_)        | (`list` _x_ ...)         | (`symbol?` _x_)     |
-| (`cons` _x_ _y_)     | (`call/cc` _fun_)        | (`+` _x_ _y_)       |
-| (`eq?` _x_ _y_)      | (`apply` _fun_ _arg_)    | (`-` _x_ _y_)       |
-| (`eqv?` _x_ _y_)     | (`display` _x_)          | (`*` _x_ _y_)       |
-| (`pair?` _x_)        | (`newline`)              | (`<` _x_ _y_)       |
-| (`null?` _x_)        | (`read`)                 | (`=` _x_ _y_)       |
-|                      | (`error` _reason_ _arg_) | (`globals`)         |
+|                   |                          |                 |
+|:------------------|:-------------------------|:----------------|
+| (`car` _lst_)     | (`display` _x_)          | (`+` _n1_ _n2_) |
+| (`cdr` _lst_)     | (`newline`)              | (`-` _n1_ _n2_) |
+| (`cons` _x_ _y_)  | (`read`)                 | (`*` _n1_ _n2_) |
+| (`eq?` _x_ _y_)   | (`eof-object?` _x_)      | (`<` _n1_ _n2_) |
+| (`pair?` _x_)     | (`symbol?` _x_)          | (`=` _n1_ _n2_) |
+| (`null?` _x_)     | (`call/cc` _fun_)        | (`number?` _x_) |
+| (`not` _x_)       | (`apply` _fun_ _arg_)    | (`globals`)     |
+| (`list` _x_ ...)  | (`error` _reason_ _arg_) |                 |
+
 
 - `(error` _reason_ _arg_`)` raises an exception with the message
   "`Error:` _reason_`:` _arg_".
@@ -153,8 +175,8 @@ For simplicity, this Scheme treats (`define` _v_ _e_) as an expression type.
 - `(globals)` returns a list of keys of the global environment.
   It is not in the standard.
 
-See [`GLOBAL_ENV`](scm.rb#L291-L334)
+See [`GLOBAL_ENV`](scm.rb#L304-L350)
 in `scm.rb` for the implementation of the procedures
 except `call/cc` and `apply`.  
 `call/cc` and `apply` are implemented particularly at 
-[`apply_function`](scm.rb#L455-L493) in `scm.rb`.
+[`apply_function`](scm.rb#L471-L509) in `scm.rb`.

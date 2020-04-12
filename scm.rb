@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 # -*- coding: utf-8 -*-
-# A little Scheme in Ruby 2.3/2.7, v0.2.1 R02.03.10/R02.03.20 by SUZUKI Hisao
-# cf. https://github.com/nukata/little-scheme-in-cs
+# A Little Scheme in Ruby 2.3/2.7, v0.3 R02.03.10/R02.04.12 by SUZUKI Hisao
+# cf. https://github.com/nukata/little-scheme-in-crystal
+#     https://github.com/nukata/little-scheme-in-cs
 #     https://github.com/nukata/l2lisp-in-ruby
 
 module LittleScheme
@@ -17,6 +18,18 @@ module LittleScheme
   EOF = Object.new
   def EOF.inspect
     return "#<EOF>"
+  end
+
+  # A unique value which represents the call/cc procedure
+  CALLCC_OBJ = Object.new
+  def CALLCC_OBJ.inspect
+    return "#<call/cc>"
+  end
+
+  # A unique value which represents the apply procedure
+  APPLY_OBJ = Object.new
+  def APPLY_OBJ.inspect
+    return "#<apply>"
   end
 
   # Cons cell
@@ -293,13 +306,13 @@ module LittleScheme
            c(:'*', 2, lambda {|x| x.car * x.cdr.car},
              c(:'<', 2, lambda {|x| x.car < x.cdr.car},
                c(:'=', 2, lambda {|x| x.car == x.cdr.car},
-                 c(:error, 2, lambda {|x|
-                     raise ErrorException.new(x.car, x.cdr.car)
-                   },
-                   c(:globals, 0, lambda {|x| globals()},
-                     Environment.new(:'call/cc', :'call/cc',
-                                     Environment.new(:apply, :apply,
-                                                     nil)))))))))
+                 c(:number?, 1, lambda {|x| Numeric === x.car},
+                   c(:error, 2, lambda {|x|
+                       raise ErrorException.new(x.car, x.cdr.car)
+                     },
+                     c(:globals, 0, lambda {|x| globals()},
+                       nil))))))))
+
   GLOBAL_ENV = Environment.new(
     nil,                        # frame marker
     nil,
@@ -307,31 +320,34 @@ module LittleScheme
       c(:cdr, 1, lambda {|x| x.car.cdr},
         c(:cons, 2, lambda {|x| Cell.new(x.car, x.cdr.car)},
           c(:eq?, 2, lambda {|x| x.car.equal? x.cdr.car},
-            c(:eqv?, 2, lambda {|x| x.car == x.cdr.car},
-              c(:pair?, 1, lambda {|x| Cell === x.car},
-                c(:null?, 1, lambda {|x| x.car.nil?},
-                  c(:not, 1, lambda {|x| x.car.equal? false},
-                    c(:list, -1, lambda {|x| x},
-                      c(:display, 1, lambda {|x|
+            c(:pair?, 1, lambda {|x| Cell === x.car},
+              c(:null?, 1, lambda {|x| x.car.nil?},
+                c(:not, 1, lambda {|x| x.car.equal? false},
+                  c(:list, -1, lambda {|x| x},
+                    c(:display, 1, lambda {|x|
+                        begin
+                          print stringify(x.car, false)
+                        rescue Errno::EPIPE => ex
+                          raise ErrorException.new(ex, NONE)
+                        end
+                        return NONE
+                      },
+                      c(:newline, 0, lambda {|x|
                           begin
-                            print stringify(x.car, false)
+                            puts
                           rescue Errno::EPIPE => ex
                             raise ErrorException.new(ex, NONE)
                           end
                           return NONE
                         },
-                        c(:newline, 0, lambda {|x|
-                            begin
-                              puts
-                            rescue Errno::EPIPE => ex
-                              raise ErrorException.new(ex, NONE)
-                            end
-                            return NONE
-                          },
-                          c(:read, 0, lambda {|x| read_expression},
-                            c(:'eof-object?', 1, lambda {|x| x.car.equal? EOF},
-                              c(:symbol?, 1, lambda {|x| Symbol === x.car},
-                                G1)))))))))))))))
+                        c(:read, 0, lambda {|x| read_expression},
+                          c(:'eof-object?', 1, lambda {|x| x.car.equal? EOF},
+                            c(:symbol?, 1, lambda {|x| Symbol === x.car},
+                              Environment.new(
+                                :'call/cc', CALLCC_OBJ,
+                                Environment.new(
+                                  :apply, APPLY_OBJ,
+                                  G1))))))))))))))))
 
   private_constant :G1
 
@@ -456,11 +472,11 @@ module LittleScheme
   private_class_method def self.apply_function(fun, arg, k, env)
     loop {
       case fun
-      when :'call/cc'
+      when CALLCC_OBJ
         k.push_RestoreEnv(env)
         fun = arg.car
         arg = Cell.new(Continuation.new(k), nil)
-      when :apply
+      when APPLY_OBJ
         fun = arg.car
         arg = arg.cdr.car
       else
